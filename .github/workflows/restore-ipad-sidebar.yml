@@ -1,0 +1,71 @@
+name: Restore iPad sidebar
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-ipad-sidebar.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore sidebar and keep natural scroll on iPad
+        shell: bash
+        run: |
+          set -euo pipefail
+          CSS='assets/index-DnxpwLME.css'
+          test -s "$CSS"
+          if ! grep -q 'IPAD-SIDEBAR-RESTORE-V1' "$CSS"; then
+            cat >> "$CSS" <<'EOF'
+
+/* IPAD-SIDEBAR-RESTORE-V1 */
+@media (min-width:900px) and (max-width:1400px){
+  html{scroll-behavior:auto!important;overflow-anchor:none!important}
+  body{overflow-anchor:none!important}
+  .desktop-workspace{
+    display:grid!important;
+    grid-template-columns:280px minmax(0,1fr)!important;
+    align-items:start!important;
+    min-height:0!important;
+  }
+  .workspace-sidebar{
+    display:flex!important;
+    position:sticky!important;
+    top:72px!important;
+    height:auto!important;
+    max-height:calc(100dvh - 72px)!important;
+    overflow:visible!important;
+    overscroll-behavior:none!important;
+  }
+  .workspace-current-view{display:none!important;position:static!important}
+  .workspace-content{
+    display:block!important;
+    min-width:0!important;
+    min-height:0!important;
+    overflow:visible!important;
+  }
+  .workspace-content>[data-workspace-module]{display:block!important}
+  .site-header{position:sticky!important;top:0!important;overflow:visible!important}
+  .site-header .desktop-nav{display:none!important}
+  .workspace-sidebar nav,
+  .workspace-advanced-nav{overflow:visible!important}
+}
+EOF
+          fi
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/index-DnxpwLME.css
+          if git diff --cached --quiet; then
+            echo 'No changes.'
+          else
+            git commit -m 'Restore iPad sidebar navigation'
+            git push
+          fi
