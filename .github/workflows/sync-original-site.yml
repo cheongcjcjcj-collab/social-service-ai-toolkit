@@ -127,24 +127,22 @@ jobs:
                   p.write_text(data, encoding='utf-8')
           PY
 
-          # iPad/Safari compatibility: the original desktop workspace uses a
-          # nested fixed-height sidebar. On GitHub Pages this can create a
-          # second scroll container. For tablet widths, keep the original
-          # visual system but use one natural page scroll and expose the whole
-          # 01–08 route continuously.
           CSS_FILE="$(find /tmp/site/assets -maxdepth 1 -type f -name 'index-*.css' | head -n 1)"
           if [ -n "$CSS_FILE" ]; then
             cat >> "$CSS_FILE" <<'EOF'
           @media (min-width:900px) and (max-width:1400px){
-            html,body{height:auto!important;min-height:100%!important;overflow-x:hidden!important;overflow-y:auto!important}
-            .site-header{position:sticky!important;top:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch}
-            .site-header .desktop-nav{display:flex!important;min-width:max-content}
-            .desktop-workspace{display:block!important;min-height:0!important}
-            .workspace-sidebar{display:none!important;position:static!important;height:auto!important;overflow:visible!important}
-            .workspace-current-view{display:none!important;position:static!important}
-            .workspace-content{display:block!important;min-height:0!important;overflow:visible!important}
-            .workspace-content>[data-workspace-module]{display:block!important}
-            .workspace-content>.hero,.workspace-content>.section,.workspace-content>.workflow-section,.workspace-content>.safety-section,.workspace-content>.tool-guide-section,.workspace-content>.ai-developments-section,.workspace-content>.workflow-map-section,.workspace-content>.workbench-section{scroll-margin-top:86px}
+            html{scroll-behavior:auto!important;overflow-anchor:none!important}
+            html,body{height:auto!important;min-height:100%!important;overflow-x:hidden!important;overflow-y:visible!important;overscroll-behavior-y:auto!important}
+            body{position:static!important;overflow-anchor:none!important;-webkit-overflow-scrolling:auto!important}
+            .site-header{position:static!important;top:auto!important;overflow:visible!important;transform:none!important;contain:none!important}
+            .site-header .desktop-nav{display:flex!important;min-width:max-content;overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+            .desktop-workspace{display:block!important;min-height:0!important;height:auto!important;overflow:visible!important;contain:none!important}
+            .workspace-sidebar{display:none!important;position:static!important;height:auto!important;max-height:none!important;overflow:visible!important}
+            .workspace-current-view{display:none!important;position:static!important;top:auto!important}
+            .workspace-content{display:block!important;min-height:0!important;height:auto!important;overflow:visible!important;position:static!important;contain:none!important}
+            .workspace-content>[data-workspace-module]{display:block!important;position:static!important;overflow:visible!important;contain:none!important}
+            .workspace-content *{scroll-snap-align:none!important;scroll-snap-stop:normal!important}
+            .workspace-content>.hero,.workspace-content>.section,.workspace-content>.workflow-section,.workspace-content>.safety-section,.workspace-content>.tool-guide-section,.workspace-content>.ai-developments-section,.workspace-content>.workflow-map-section,.workspace-content>.workbench-section{scroll-margin-top:12px;overflow-anchor:none!important}
           }
           EOF
           fi
@@ -175,6 +173,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No mirrored changes to commit.'
           else
-            git commit -m 'Mirror original ChatGPT Site with iPad compatibility'
+            git commit -m 'Mirror original ChatGPT Site with hardened iPad Safari scrolling'
             git push
           fi
