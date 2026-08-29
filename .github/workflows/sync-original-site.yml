@@ -1,64 +1,37 @@
-name: Sync original ChatGPT Sites source
+name: Mirror original ChatGPT Site to GitHub Pages
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - '.source_bundle/**'
       - '.github/workflows/sync-original-site.yml'
 
 permissions:
   contents: write
 
 jobs:
-  rebuild:
+  mirror:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct original app source
+      - name: Mirror original ChatGPT Site
         shell: bash
         run: |
           set -euo pipefail
-          echo 'Bundle chunk checksums:'
-          sha256sum .source_bundle/src-*
-          cat .source_bundle/src-* > /tmp/source.b64
-          base64 -d /tmp/source.b64 > /tmp/source-text.tar.gz
-          mkdir -p /tmp/source
-          tar -xzf /tmp/source-text.tar.gz -C /tmp/source
-          cp /tmp/source/runtime-app.tsx ./app.tsx
-          cp /tmp/source/runtime-styles.css ./styles.css
+          ORIGIN='https://social-service-ai-toolkit.cqrgjcp7wz.chatgpt.site'
+          HOST='social-service-ai-toolkit.cqrgjcp7wz.chatgpt.site'
+          rm -rf /tmp/mirror /tmp/site
+          mkdir -p /tmp/mirror /tmp/site
 
-      - name: Create GitHub Pages entry page
-        shell: bash
-        run: |
-          cat > index.html <<'EOF'
-          <!doctype html>
-          <html lang="zh-Hant-HK">
-          <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>AI 前線工作工具箱｜社福與戒毒服務實務</title>
-            <meta name="description" content="學識同 AI 溝通，將社福前線工作需要變成可執行的下一步：識講、識橋接、識修正。" />
-            <link rel="icon" href="/social-service-ai-toolkit/favicon.svg" />
-            <link rel="stylesheet" href="/social-service-ai-toolkit/styles.css" />
-            <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-            <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-            <script src="https://unpkg.com/@babel/standalone@7.28.5/babel.min.js"></script>
-          </head>
-          <body>
-            <div id="root"></div>
-            <script type="text/babel" data-presets="typescript,react" src="/social-service-ai-toolkit/app.tsx"></script>
-          </body>
-          </html>
-          EOF
+          # Download the already-rendered original site, its CSS/JS and page requisites.
+          wget --quiet --mirror --page-requisites --convert-links --adjust-extension \
+            --no-parent --execute robots=off "$ORIGIN/" -P /tmp/mirror
+          cp -a "/tmp/mirror/$HOST/." /tmp/site/
 
-      - name: Download all original teaching images and videos
-        shell: bash
-        run: |
-          set -euo pipefail
-          ORIGIN="https://social-service-ai-toolkit.cqrgjcp7wz.chatgpt.site"
+          # Teaching media referenced from the client app are not always visible to wget,
+          # so fetch them explicitly from the original public site.
           cat > /tmp/assets.txt <<'EOF'
           appscript/step-1-thumb.webp
           appscript/step-1.webp
@@ -89,6 +62,9 @@ jobs:
           demo/canva-presentation/slide-08.png
           demo/canva-presentation/slide-09.png
           demo/canva-presentation/slide-10.png
+          demo/canva-presentation/canva-ai-prompt.png
+          demo/canva-presentation/psychodynamic-cover.png
+          demo/canva-presentation/psychodynamic-introduction.pdf
           demo/canva-text-to-video/family-tea-result.mp4
           demo/canva-text-to-video/prompt-and-result.jpeg
           demo/gemini-srt-output.png
@@ -121,23 +97,64 @@ jobs:
           interfaces/notebooklm-interface.png
           window.svg
           EOF
+
           while IFS= read -r asset; do
             [ -n "$asset" ] || continue
-            mkdir -p "$(dirname "$asset")"
+            mkdir -p "/tmp/site/$(dirname "$asset")"
             echo "Downloading $asset"
-            curl --fail --location --retry 3 --retry-delay 2 --silent --show-error "$ORIGIN/$asset" -o "$asset"
+            curl --fail --location --retry 3 --retry-delay 2 --silent --show-error \
+              "$ORIGIN/$asset" -o "/tmp/site/$asset"
           done < /tmp/assets.txt
 
-      - name: Commit original site files
+          # GitHub Pages hosts this repository below /social-service-ai-toolkit/.
+          # Rewrite root-relative application/media paths in text assets.
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('/tmp/site')
+          prefixes = ('appscript','demo','examples','interfaces','_next','assets')
+          for p in root.rglob('*'):
+              if not p.is_file():
+                  continue
+              try:
+                  data = p.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+              original = data
+              for prefix in prefixes:
+                  data = data.replace(f'"/{prefix}/', f'"/social-service-ai-toolkit/{prefix}/')
+                  data = data.replace(f"'/{prefix}/", f"'/social-service-ai-toolkit/{prefix}/")
+                  data = data.replace(f'url(/{prefix}/', f'url(/social-service-ai-toolkit/{prefix}/')
+              data = data.replace('href="/favicon.svg"', 'href="/social-service-ai-toolkit/favicon.svg"')
+              if data != original:
+                  p.write_text(data, encoding='utf-8')
+          PY
+
+          # Replace only the generated site files; keep repository metadata/workflows.
+          rm -rf _next assets appscript demo examples interfaces
+          find . -maxdepth 1 -type f ! -name '.gitignore' -delete
+          cp -a /tmp/site/. .
+          touch .nojekyll
+
+      - name: Verify mirrored site
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html app.tsx styles.css appscript demo examples interfaces favicon.svg file.svg globe.svg window.svg
+          test -s index.html
+          test -s demo/srt-workflow/final-captioned-video.mp4
+          test -s interfaces/chatgpt-interface.png
+          echo "Mirrored files: $(find . -type f | wc -l)"
+          echo "Mirrored size: $(du -sh . | cut -f1)"
+
+      - name: Commit mirrored site
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
           if git diff --cached --quiet; then
-            echo "No generated changes"
+            echo 'No mirrored changes to commit.'
           else
-            git commit -m "Migrate original ChatGPT Sites content and media"
+            git commit -m 'Mirror original ChatGPT Site for GitHub Pages'
             git push
           fi
