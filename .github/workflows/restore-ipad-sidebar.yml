@@ -1,22 +1,16 @@
-name: Restore iPad sidebar after mirror
+name: Restore iPad sidebar
 
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/restore-ipad-sidebar.yml'
-  workflow_run:
-    workflows:
-      - "Mirror original ChatGPT Site to GitHub Pages"
-    types:
-      - completed
 
 permissions:
   contents: write
 
 jobs:
   restore-sidebar:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,10 +25,10 @@ jobs:
           CSS_FILE="$(find assets -maxdepth 1 -type f -name 'index-*.css' | head -n 1)"
           test -n "$CSS_FILE"
 
-          if ! grep -q 'IPAD-SIDEBAR-PERSIST-V2' "$CSS_FILE"; then
+          if ! grep -q 'IPAD-SIDEBAR-PERSIST-V3' "$CSS_FILE"; then
             cat >> "$CSS_FILE" <<'EOF'
 
-/* IPAD-SIDEBAR-PERSIST-V2 */
+/* IPAD-SIDEBAR-PERSIST-V3 */
 @media (min-width:760px) and (max-width:1400px){
   html{scroll-behavior:auto!important;overflow-anchor:none!important}
   html,body{height:auto!important;min-height:100%!important;overflow-x:hidden!important}
@@ -79,11 +73,6 @@ jobs:
     height:auto!important;
     overflow:visible!important;
     position:relative!important;
-  }
-
-  .workspace-content>[data-workspace-module]{
-    position:relative!important;
-    overflow:visible!important;
   }
 }
 EOF
