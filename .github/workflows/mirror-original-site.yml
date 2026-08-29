@@ -1,0 +1,164 @@
+name: Mirror original ChatGPT Sites website
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/mirror-original-site.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirror deployed website
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGIN='https://social-service-ai-toolkit.cqrgjcp7wz.chatgpt.site'
+          TMP="$(mktemp -d)"
+          cd "$TMP"
+          wget \
+            --page-requisites \
+            --convert-links \
+            --adjust-extension \
+            --no-host-directories \
+            --span-hosts \
+            --domains='social-service-ai-toolkit.cqrgjcp7wz.chatgpt.site' \
+            --execute robots=off \
+            "$ORIGIN/"
+          test -f index.html
+          cp -a . "$GITHUB_WORKSPACE/.mirror/"
+
+      - name: Fetch teaching images and videos
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGIN='https://social-service-ai-toolkit.cqrgjcp7wz.chatgpt.site'
+          cd "$GITHUB_WORKSPACE/.mirror"
+          cat > /tmp/assets.txt <<'EOF'
+          appscript/step-1-thumb.webp
+          appscript/step-1.webp
+          appscript/step-2-thumb.webp
+          appscript/step-2.webp
+          appscript/step-3-thumb.webp
+          appscript/step-3.webp
+          appscript/step-4-thumb.webp
+          appscript/step-4.webp
+          appscript/step-5-thumb.webp
+          appscript/step-5.webp
+          demo/cantonese-tts/cantonese-voice-example.mp4
+          demo/cantonese-tts/canva-ai-voice.jpeg
+          demo/cantonese-tts/capcut-text-to-speech.jpeg
+          demo/cantonese-tts/minimax-audio-cantonese.jpeg
+          demo/cantonese-tts/step-by-step/adding-cantonese-line-by-line.mp4
+          demo/cantonese-tts/step-by-step/poster.jpg
+          demo/canva-image-to-video/fathers-day-result.mp4
+          demo/canva-image-to-video/result.jpeg
+          demo/canva-image-to-video/settings.jpeg
+          demo/canva-presentation/slide-01.png
+          demo/canva-presentation/slide-02.png
+          demo/canva-presentation/slide-03.png
+          demo/canva-presentation/slide-04.png
+          demo/canva-presentation/slide-05.png
+          demo/canva-presentation/slide-06.png
+          demo/canva-presentation/slide-07.png
+          demo/canva-presentation/slide-08.png
+          demo/canva-presentation/slide-09.png
+          demo/canva-presentation/slide-10.png
+          demo/canva-text-to-video/family-tea-result.mp4
+          demo/canva-text-to-video/prompt-and-result.jpeg
+          demo/gemini-srt-output.png
+          demo/gotranscript-subtitle-converter.png
+          demo/grok/fathers-day-result.mp4
+          demo/grok/fathers-day-source.jpeg
+          demo/grok/image-to-video-prompt.jpeg
+          demo/grok/imagine-settings.jpeg
+          demo/no-prompt-image-to-video/savanna-result.mp4
+          demo/no-prompt-image-to-video/savanna-source.png
+          demo/notebooklm-parenting-source.png
+          demo/notebooklm-parenting-video.png
+          demo/notebooklm-source-to-slides.png
+          demo/notebooklm-youtube-source.png
+          demo/srt-workflow/01-gemini-timeline.jpeg
+          demo/srt-workflow/02-srt-file.jpeg
+          demo/srt-workflow/03-capcut-import.jpeg
+          demo/srt-workflow/04-capcut-subtitle-timing.jpeg
+          demo/srt-workflow/final-captioned-video.mp4
+          examples/tong-lok-chatgpt.png
+          examples/tong-lok-gemini.png
+          examples/tong-lok-grok.jpeg
+          favicon.svg
+          file.svg
+          globe.svg
+          interfaces/chatgpt-interface.png
+          interfaces/copilot-interface.png
+          interfaces/gemini-interface.png
+          interfaces/grok-interface.jpeg
+          interfaces/notebooklm-interface.png
+          window.svg
+          EOF
+          while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            mkdir -p "$(dirname "$asset")"
+            curl --fail --location --retry 3 --retry-delay 2 --silent --show-error "$ORIGIN/$asset" -o "$asset"
+          done < /tmp/assets.txt
+
+      - name: Adapt root-relative links for GitHub Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/.mirror"
+          python3 - <<'PY'
+          from pathlib import Path
+          base='/social-service-ai-toolkit'
+          text_ext={'.html','.css','.js','.mjs','.json','.txt','.xml','.svg'}
+          prefixes=['/_next/','/_vercel/','/appscript/','/demo/','/examples/','/interfaces/','/favicon.svg','/file.svg','/globe.svg','/window.svg']
+          for p in Path('.').rglob('*'):
+              if not p.is_file() or p.suffix.lower() not in text_ext:
+                  continue
+              try:
+                  s=p.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  continue
+              old=s
+              for prefix in prefixes:
+                  s=s.replace('"'+prefix, '"'+base+prefix)
+                  s=s.replace("'"+prefix, "'"+base+prefix)
+                  s=s.replace('('+prefix, '('+base+prefix)
+                  s=s.replace('='+prefix, '='+base+prefix)
+              if s != old:
+                  p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Replace simplified site with mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          rm -rf appscript demo examples interfaces _next
+          rm -f index.html favicon.svg file.svg globe.svg window.svg app.tsx styles.css
+          cp -a .mirror/. ./
+          rm -rf .mirror
+          touch .nojekyll
+
+      - name: Commit mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+          else
+            git commit -m 'Mirror original ChatGPT Sites website with teaching media'
+            git push
+          fi
