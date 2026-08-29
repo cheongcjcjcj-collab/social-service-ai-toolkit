@@ -1,0 +1,63 @@
+name: Fix iPad layout
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-ipad-layout.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Patch tablet layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          CSS_FILE="$(find assets -maxdepth 1 -type f -name 'index-*.css' | head -n 1)"
+          test -n "$CSS_FILE"
+          cat >> "$CSS_FILE" <<'EOF'
+
+/* GitHub Pages tablet/iPad compatibility patch.
+   Keep the original content and styling, but avoid nested viewport scrolling
+   on Safari/iPad and make the full 01–08 learning route reachable by one
+   normal page scroll. Desktop >1400px keeps the original workspace layout. */
+@media (min-width: 900px) and (max-width: 1400px) {
+  html, body { height: auto !important; min-height: 100% !important; overflow-x: hidden !important; overflow-y: auto !important; }
+  .site-header { position: sticky !important; top: 0 !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .site-header .desktop-nav { display: flex !important; min-width: max-content; }
+  .desktop-workspace { display: block !important; min-height: 0 !important; }
+  .workspace-sidebar { display: none !important; position: static !important; height: auto !important; overflow: visible !important; }
+  .workspace-current-view { display: none !important; position: static !important; }
+  .workspace-content { display: block !important; min-height: 0 !important; overflow: visible !important; }
+  .workspace-content > [data-workspace-module] { display: block !important; }
+  .workspace-content > .hero,
+  .workspace-content > .section,
+  .workspace-content > .workflow-section,
+  .workspace-content > .safety-section,
+  .workspace-content > .tool-guide-section,
+  .workspace-content > .ai-developments-section,
+  .workspace-content > .workflow-map-section,
+  .workspace-content > .workbench-section { scroll-margin-top: 86px; }
+}
+EOF
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/*.css
+          if git diff --cached --quiet; then
+            echo 'No CSS changes to commit.'
+          else
+            git commit -m 'Fix iPad nested scrolling and full-route visibility'
+            git push
+          fi
