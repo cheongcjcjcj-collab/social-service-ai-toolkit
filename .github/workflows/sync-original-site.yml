@@ -127,6 +127,28 @@ jobs:
                   p.write_text(data, encoding='utf-8')
           PY
 
+          # iPad/Safari compatibility: the original desktop workspace uses a
+          # nested fixed-height sidebar. On GitHub Pages this can create a
+          # second scroll container. For tablet widths, keep the original
+          # visual system but use one natural page scroll and expose the whole
+          # 01–08 route continuously.
+          CSS_FILE="$(find /tmp/site/assets -maxdepth 1 -type f -name 'index-*.css' | head -n 1)"
+          if [ -n "$CSS_FILE" ]; then
+            cat >> "$CSS_FILE" <<'EOF'
+          @media (min-width:900px) and (max-width:1400px){
+            html,body{height:auto!important;min-height:100%!important;overflow-x:hidden!important;overflow-y:auto!important}
+            .site-header{position:sticky!important;top:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+            .site-header .desktop-nav{display:flex!important;min-width:max-content}
+            .desktop-workspace{display:block!important;min-height:0!important}
+            .workspace-sidebar{display:none!important;position:static!important;height:auto!important;overflow:visible!important}
+            .workspace-current-view{display:none!important;position:static!important}
+            .workspace-content{display:block!important;min-height:0!important;overflow:visible!important}
+            .workspace-content>[data-workspace-module]{display:block!important}
+            .workspace-content>.hero,.workspace-content>.section,.workspace-content>.workflow-section,.workspace-content>.safety-section,.workspace-content>.tool-guide-section,.workspace-content>.ai-developments-section,.workspace-content>.workflow-map-section,.workspace-content>.workbench-section{scroll-margin-top:86px}
+          }
+          EOF
+          fi
+
           rm -rf _next assets appscript demo examples interfaces
           find . -maxdepth 1 -type f ! -name '.gitignore' -delete
           cp -a /tmp/site/. .
@@ -139,6 +161,7 @@ jobs:
           test -s index.html
           test -s demo/srt-workflow/final-captioned-video.mp4
           test -s interfaces/chatgpt-interface.png
+          grep -q '08' index.html
           echo "Mirrored files: $(find . -type f | wc -l)"
           echo "Mirrored size: $(du -sh . | cut -f1)"
 
@@ -152,6 +175,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No mirrored changes to commit.'
           else
-            git commit -m 'Mirror original ChatGPT Site for GitHub Pages'
+            git commit -m 'Mirror original ChatGPT Site with iPad compatibility'
             git push
           fi
