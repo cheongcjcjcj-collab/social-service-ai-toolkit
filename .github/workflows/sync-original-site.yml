@@ -1,0 +1,141 @@
+name: Sync original ChatGPT Sites source
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.source_bundle/**'
+      - '.github/workflows/sync-original-site.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Reconstruct original app source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .source_bundle/src-* > /tmp/source.b64
+          base64 -d /tmp/source.b64 > /tmp/source-text.tar.gz
+          mkdir -p /tmp/source
+          tar -xzf /tmp/source-text.tar.gz -C /tmp/source
+          cp /tmp/source/runtime-app.tsx ./app.tsx
+          cp /tmp/source/runtime-styles.css ./styles.css
+
+      - name: Create GitHub Pages entry page
+        shell: bash
+        run: |
+          cat > index.html <<'EOF'
+          <!doctype html>
+          <html lang="zh-Hant-HK">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>AI 前線工作工具箱｜社福與戒毒服務實務</title>
+            <meta name="description" content="學識同 AI 溝通，將社福前線工作需要變成可執行的下一步：識講、識橋接、識修正。" />
+            <link rel="icon" href="/social-service-ai-toolkit/favicon.svg" />
+            <link rel="stylesheet" href="/social-service-ai-toolkit/styles.css" />
+            <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+            <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+            <script src="https://unpkg.com/@babel/standalone@7.28.5/babel.min.js"></script>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="text/babel" data-presets="typescript,react" src="/social-service-ai-toolkit/app.tsx"></script>
+          </body>
+          </html>
+          EOF
+
+      - name: Download all original teaching images and videos
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGIN="https://social-service-ai-toolkit.cqrgjcp7wz.chatgpt.site"
+          cat > /tmp/assets.txt <<'EOF'
+          appscript/step-1-thumb.webp
+          appscript/step-1.webp
+          appscript/step-2-thumb.webp
+          appscript/step-2.webp
+          appscript/step-3-thumb.webp
+          appscript/step-3.webp
+          appscript/step-4-thumb.webp
+          appscript/step-4.webp
+          appscript/step-5-thumb.webp
+          appscript/step-5.webp
+          demo/cantonese-tts/cantonese-voice-example.mp4
+          demo/cantonese-tts/canva-ai-voice.jpeg
+          demo/cantonese-tts/capcut-text-to-speech.jpeg
+          demo/cantonese-tts/minimax-audio-cantonese.jpeg
+          demo/cantonese-tts/step-by-step/adding-cantonese-line-by-line.mp4
+          demo/cantonese-tts/step-by-step/poster.jpg
+          demo/canva-image-to-video/fathers-day-result.mp4
+          demo/canva-image-to-video/result.jpeg
+          demo/canva-image-to-video/settings.jpeg
+          demo/canva-presentation/slide-01.png
+          demo/canva-presentation/slide-02.png
+          demo/canva-presentation/slide-03.png
+          demo/canva-presentation/slide-04.png
+          demo/canva-presentation/slide-05.png
+          demo/canva-presentation/slide-06.png
+          demo/canva-presentation/slide-07.png
+          demo/canva-presentation/slide-08.png
+          demo/canva-presentation/slide-09.png
+          demo/canva-presentation/slide-10.png
+          demo/canva-text-to-video/family-tea-result.mp4
+          demo/canva-text-to-video/prompt-and-result.jpeg
+          demo/gemini-srt-output.png
+          demo/gotranscript-subtitle-converter.png
+          demo/grok/fathers-day-result.mp4
+          demo/grok/fathers-day-source.jpeg
+          demo/grok/image-to-video-prompt.jpeg
+          demo/grok/imagine-settings.jpeg
+          demo/no-prompt-image-to-video/savanna-result.mp4
+          demo/no-prompt-image-to-video/savanna-source.png
+          demo/notebooklm-parenting-source.png
+          demo/notebooklm-parenting-video.png
+          demo/notebooklm-source-to-slides.png
+          demo/notebooklm-youtube-source.png
+          demo/srt-workflow/01-gemini-timeline.jpeg
+          demo/srt-workflow/02-srt-file.jpeg
+          demo/srt-workflow/03-capcut-import.jpeg
+          demo/srt-workflow/04-capcut-subtitle-timing.jpeg
+          demo/srt-workflow/final-captioned-video.mp4
+          examples/tong-lok-chatgpt.png
+          examples/tong-lok-gemini.png
+          examples/tong-lok-grok.jpeg
+          favicon.svg
+          file.svg
+          globe.svg
+          interfaces/chatgpt-interface.png
+          interfaces/copilot-interface.png
+          interfaces/gemini-interface.png
+          interfaces/grok-interface.jpeg
+          interfaces/notebooklm-interface.png
+          window.svg
+          EOF
+          while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            mkdir -p "$(dirname "$asset")"
+            echo "Downloading $asset"
+            curl --fail --location --retry 3 --retry-delay 2 --silent --show-error "$ORIGIN/$asset" -o "$asset"
+          done < /tmp/assets.txt
+
+      - name: Commit original site files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html app.tsx styles.css appscript demo examples interfaces favicon.svg file.svg globe.svg window.svg
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+          else
+            git commit -m "Migrate original ChatGPT Sites content and media"
+            git push
+          fi
