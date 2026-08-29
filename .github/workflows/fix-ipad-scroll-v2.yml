@@ -1,0 +1,128 @@
+name: Fix iPad scroll and sidebar
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-ipad-scroll-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch iPad layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          CSS_FILE="$(find assets -maxdepth 1 -type f -name 'index-*.css' | head -n 1)"
+          test -n "$CSS_FILE"
+          cat >> "$CSS_FILE" <<'EOF'
+
+/* IPAD-SCROLL-RECOVERY-V4 */
+@media (min-width:760px) and (max-width:1400px){
+  html{
+    height:auto!important;
+    min-height:100%!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    scroll-behavior:auto!important;
+    overflow-anchor:none!important;
+    scroll-snap-type:none!important;
+  }
+  body{
+    height:auto!important;
+    min-height:100%!important;
+    overflow-x:hidden!important;
+    overflow-y:visible!important;
+    position:static!important;
+    touch-action:pan-y!important;
+    overscroll-behavior-y:auto!important;
+  }
+  main{
+    height:auto!important;
+    min-height:100%!important;
+    overflow:visible!important;
+    position:relative!important;
+  }
+  .site-header{
+    position:sticky!important;
+    top:0!important;
+    z-index:30!important;
+  }
+  .site-header .desktop-nav{display:none!important}
+  .desktop-workspace{
+    display:grid!important;
+    grid-template-columns:280px minmax(0,1fr)!important;
+    align-items:start!important;
+    height:auto!important;
+    min-height:0!important;
+    overflow:visible!important;
+    position:relative!important;
+  }
+  .workspace-sidebar{
+    display:flex!important;
+    position:sticky!important;
+    top:72px!important;
+    align-self:start!important;
+    height:calc(100dvh - 72px)!important;
+    max-height:calc(100dvh - 72px)!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    -webkit-overflow-scrolling:touch!important;
+    z-index:18!important;
+  }
+  .workspace-content{
+    display:block!important;
+    min-width:0!important;
+    height:auto!important;
+    min-height:0!important;
+    overflow:visible!important;
+    position:relative!important;
+    touch-action:pan-y!important;
+  }
+  .workspace-current-view{
+    display:grid!important;
+    position:sticky!important;
+    top:72px!important;
+    z-index:20!important;
+  }
+  [data-active-workspace-module=start] .workspace-content>[data-workspace-module]:not([data-workspace-module=start]),
+  [data-active-workspace-module=basics] .workspace-content>[data-workspace-module]:not([data-workspace-module=basics]),
+  [data-active-workspace-module=prompts] .workspace-content>[data-workspace-module]:not([data-workspace-module=prompts]),
+  [data-active-workspace-module=media] .workspace-content>[data-workspace-module]:not([data-workspace-module=media]),
+  [data-active-workspace-module=tools] .workspace-content>[data-workspace-module]:not([data-workspace-module=tools]),
+  [data-active-workspace-module=workflow] .workspace-content>[data-workspace-module]:not([data-workspace-module=workflow]),
+  [data-active-workspace-module=safety] .workspace-content>[data-workspace-module]:not([data-workspace-module=safety]),
+  [data-active-workspace-module=guide] .workspace-content>[data-workspace-module]:not([data-workspace-module=guide]),
+  [data-active-workspace-module=updates] .workspace-content>[data-workspace-module]:not([data-workspace-module=updates]){
+    display:none!important;
+  }
+  .workspace-content>[data-workspace-module]{
+    overflow:visible!important;
+    position:relative!important;
+    scroll-snap-align:none!important;
+  }
+}
+EOF
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/index-*.css
+          if git diff --cached --quiet; then
+            echo 'No changes.'
+          else
+            git commit -m 'Fix iPad vertical scrolling and persistent sidebar'
+            git push
+          fi
