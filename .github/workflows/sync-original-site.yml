@@ -25,13 +25,10 @@ jobs:
           rm -rf /tmp/mirror /tmp/site
           mkdir -p /tmp/mirror /tmp/site
 
-          # Download the already-rendered original site, its CSS/JS and page requisites.
           wget --quiet --mirror --page-requisites --convert-links --adjust-extension \
             --no-parent --execute robots=off "$ORIGIN/" -P /tmp/mirror
           cp -a "/tmp/mirror/$HOST/." /tmp/site/
 
-          # Teaching media referenced from the client app are not always visible to wget,
-          # so fetch them explicitly from the original public site.
           cat > /tmp/assets.txt <<'EOF'
           appscript/step-1-thumb.webp
           appscript/step-1.webp
@@ -102,12 +99,13 @@ jobs:
             [ -n "$asset" ] || continue
             mkdir -p "/tmp/site/$(dirname "$asset")"
             echo "Downloading $asset"
-            curl --fail --location --retry 3 --retry-delay 2 --silent --show-error \
-              "$ORIGIN/$asset" -o "/tmp/site/$asset"
+            if ! curl --fail --location --retry 2 --retry-delay 1 --silent --show-error \
+              "$ORIGIN/$asset" -o "/tmp/site/$asset"; then
+              echo "WARNING: unavailable on current public site: $asset"
+              rm -f "/tmp/site/$asset"
+            fi
           done < /tmp/assets.txt
 
-          # GitHub Pages hosts this repository below /social-service-ai-toolkit/.
-          # Rewrite root-relative application/media paths in text assets.
           python3 - <<'PY'
           from pathlib import Path
           root = Path('/tmp/site')
@@ -129,7 +127,6 @@ jobs:
                   p.write_text(data, encoding='utf-8')
           PY
 
-          # Replace only the generated site files; keep repository metadata/workflows.
           rm -rf _next assets appscript demo examples interfaces
           find . -maxdepth 1 -type f ! -name '.gitignore' -delete
           cp -a /tmp/site/. .
